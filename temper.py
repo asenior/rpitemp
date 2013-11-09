@@ -3,19 +3,18 @@
 import os
 import glob
 import time
+import datetime
 
-os.system('modprobe w1-gpio')
-os.system('modprobe w1-therm')
 
 base_dir = '/sys/bus/w1/devices/'
-
+logfile = '~/templog/%Y/%m'
 
 def GetDevices():
   device_dir = glob.glob(base_dir + '28*')
   devs = []
   for d in device_dir:
     els = d.split('/')
-    devs.append(els[-1])
+    devs.append(els[-1].split('-')[1])
   return devs  
 
 def read_temp_raw(device_file):
@@ -36,13 +35,30 @@ def read_temp(device_file):
         temp_f = temp_c * 9.0 / 5.0 + 32.0
         return temp_c
 	
+def init():
+  # These need to be done as sudo anyway, but now
+  # I put them in /etc/modules.
+  os.system('modprobe w1-gpio')
+  os.system('modprobe w1-therm')
+
 def mymain():
+  # init()
   devs = GetDevices()
-  while True:
-    for onedev in devs:
-      t = read_temp('%s/%s/w1_slave' % (base_dir, onedev))
-      print onedev, t
-  time.sleep(1)
+  datetimenow = datetime.datetime.now()
+  logdir = os.path.expanduser(datetimenow.strftime(logfile))
+  print logdir
+  if not os.path.exists(logdir):
+    os.makedirs(logdir)
+  filename = datetimenow.strftime('%s/%%d' % logdir)
+  date = datetimenow.strftime('%Y-%m-%d %H:%M:%S')
+  print filename, date
+  temps =[date]
+  for onedev in devs:
+    t = read_temp('%s/28-%s/w1_slave' % (base_dir, onedev))
+    temps.append('%s:%.2f' % (onedev, t))
+  with open(filename, 'a') as myfile:
+    myfile.write(' '.join(temps))
+    myfile.write('\n')
 
 mymain()
 
