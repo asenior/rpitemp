@@ -65,6 +65,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     self.BasicHeaders()
     self.wfile.write("<h1>Image: " + filename + "</h1>\n")
     self.wfile.write('<img src="./'+filename+'" alt="camera">\n')
+    self.wfile.write('<br><a href="temp.html">Temperatures</a>\n')
     self.Footer()
     self.wfile.close()
 
@@ -77,10 +78,20 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     self.wfile.close()
     
   def TemperatureGraphRequest(self, datestring, units):
+    """Returns an HTML page with two dygraphs and links.
+
+    First is daily max/min temperatures for all time recorded.
+    Second is minute temps for the given day (a string YYYY/MM/DD)
+    Temperatures are provided as javascript via separate requests,
+    in the requested units (a string 'C' or 'F'
+    """
     self.send_response(200)
     self.send_header('Content-Type', 'text/html')
     self.end_headers()
-
+    dt = datetime.datetime.strptime(datestring, "%Y/%m/%d")
+    delta = datetime.timedelta(1)  # 1 Day
+    prevday=  (dt - delta).strftime("%Y/%m/%d")
+    nextday= (dt + delta).strftime("%Y/%m/%d")
     self.wfile.write("<!DOCTYPE html>\n")
     self.wfile.write("<html>\n")
     self.wfile.write("<script src='/dygraph-combined.js' ></script>\n")
@@ -88,41 +99,57 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                        units)
     self.wfile.write("<script src='/temp.js?date=%s&units=%s' ></script>\n" %
                        (datestring, units))
-    self.wfile.write("""<body>
-                     <div id="graphdivdaily"></div>
-                     <div id="graphdiv2"></div>
+    self.wfile.write("""
+<body>
+  <h2>%s</h2>
+  <div id="graphdivdaily"></div>
+  <div id="graphdiv2"></div>
 <script>
 new Dygraph(document.getElementById("graphdivdaily"),
-              dailytemperatures,
-              {
-                customBars: true,
-                labels: dailytemplabels,
-                ylabel: 'Temperature (%s)',
-              });
+    dailytemperatures,
+    {
+      customBars: true,
+      labels: dailytemplabels,
+      ylabel: 'Temperature (%s)',
+    });
 new Dygraph(document.getElementById("graphdiv2"),
-              temperatures,
-              {
-                labels: templabels,
-                ylabel: 'Temperature (%s)',
-              });
-
+    temperatures,
+    {
+      labels: templabels,
+      ylabel: 'Temperature (%s)',
+    });
 </script>
+<a href="temp.html?date=%s">%s&lt;&lt;</a> &nbsp;&nbsp;&nbsp;&nbsp;
+<a href="temp.html?date=%s">&gt;&gt;%s</a> <br>
+<a href="photo.html?width=800&height=600">Photo</a>
 </body>
 </html>
-""" % (units[0], units[0])
+""" % (dt.strftime("%A %d %B %Y"), units[0], units[0], prevday, prevday, nextday, nextday)
 )
     self.wfile.close()
+
+  @staticmethod
+  def CanonicalUnits(units):
+    if units and (units[0] == 'c' or units[0] == 'C'):
+        return 'C'
+    else:
+        return 'F'
+
+  @staticmethod
+  def ConvertTempStringListFromC(temp, units):
+    """Takes a list of strings of floating point Celsius temps
+    and returns them as a list of floating points strings in the
+    requested units."""
+    if MyHandler.CanonicalUnits(units) == 'C':
+      return temp
+    else:
+      return ["%.2f" % (1.8 * float(t) + 32.0) for t in temp]
 
   def TemperatureRequestAsJS(self, filename, units):
     """Send the file's data as a javascript array for dygraphs to plot"""
     self.send_response(200)
     self.send_header('Content-Type', 'text/javascript')
     self.end_headers()
-    offs = 32
-    mult = 1.8
-    if units and (units[0] == 'c' or units[0] == 'C'):
-	mult = 1.0
-	offs = 0.0
     self.wfile.write('temperatures = [')
     with open(os.path.expanduser(filename)) as myfile:
       content = myfile.readlines()
@@ -136,10 +163,12 @@ new Dygraph(document.getElementById("graphdiv2"),
       temps = []
       for fields in a[2:]:
         parts = fields.split(':')
-        temps.append("%.2f" % (offs + mult * float(parts[1])))
+        temps.append(parts[1])
         if first:
-          labels.append('"%s"' %parts[0])
-      self.wfile.write('[%.2f, %s],\n' % (timesecs, ','.join(temps)))
+          labels.append('"%s"' % parts[0])
+      self.wfile.write(
+        '[new Date(\"%s %s\"), %s],\n' %
+        (a[0], a[1], ','.join(self.ConvertTempStringListFromC(temps, units))))
       first = False
     self.wfile.write('];\n templabels = [%s];' % ','.join(labels))
     self.wfile.close()
@@ -152,11 +181,7 @@ new Dygraph(document.getElementById("graphdiv2"),
     self.send_response(200)
     self.send_header('Content-Type', 'text/javascript')
     self.end_headers()
-    offs = 32
-    mult = 1.8
-    if units and (units[0] == 'c' or units[0] == 'C'):
-	mult = 1.0
-	offs = 0.0
+    units = self.CanonicalUnits(units)
     self.wfile.write('dailytemperatures = [\n')
     with open(os.path.expanduser(filename)) as myfile:
       content = myfile.readlines()
@@ -168,7 +193,8 @@ new Dygraph(document.getElementById("graphdiv2"),
       temps = []
       for fields in a[1:]:
         parts = fields.split(':')
-        temps.append("[%s]" % ",".join(parts[1:]))
+        temps.append("[%s]" % ",".join(
+            self.ConvertTempStringListFromC(parts[1:], units)))
         # TODO Handle different devices / different order.
         if first:
           labels.append('"%s"' % parts[0])
