@@ -185,21 +185,36 @@ new Dygraph(document.getElementById("graphdiv2"),
     self.wfile.write('dailytemperatures = [\n')
     with open(os.path.expanduser(filename)) as myfile:
       content = myfile.readlines()
-    labels = ['"Date"']
-    first = True
+    labels = []
+    # First build a list of all the labels.
     for l in content:
       a= l.strip().split(' ')
       thedate=a[0]
       temps = []
       for fields in a[1:]:
         parts = fields.split(':')
-        temps.append("[%s]" % ",".join(
-            self.ConvertTempStringListFromC(parts[1:], units)))
+        if not parts[0] in labels:
+          labels.append(parts[0])
+    # TODO sort the labels.
+    labels= sorted(labels)
+    # Now build a javascript array with all the data.
+    for l in content:
+      a= l.strip().split(' ')
+      temps = ['NaN' for i in labels]
+      thedate = a[0]
+      these_temps = {}
+      # Put all the temperatures into a dict.
+      for fields in a[1:]:
+        parts = fields.split(':')
+        assert parts[0] in labels
+        temps[labels.index(parts[0])] = "[%s]" % ",".join(
+          self.ConvertTempStringListFromC(parts[1:], units))
+
+      # Now pull the temperatures out in the order of the labels.       
         # TODO Handle different devices / different order.
-        if first:
-          labels.append('"%s"' % parts[0])
       self.wfile.write('[ new Date(\"%s\"), %s],\n' %
                        (thedate, ','.join(temps)))
       first = False
-    self.wfile.write('];\n dailytemplabels = [%s];\n' % ','.join(labels))
+    self.wfile.write('];\n dailytemplabels = [%s];\n' % ','.join(
+      ['"%s"' % x.lstrip('0') for x in ['Date'] + labels]))
     self.wfile.close()
