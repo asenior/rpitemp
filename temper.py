@@ -46,19 +46,19 @@ def mymain():
   devs = GetDevices()
   datetimenow = datetime.datetime.now()
   logdir = os.path.expanduser(datetimenow.strftime(logfile))
-  print logdir
   if not os.path.exists(logdir):
     os.makedirs(logdir)
   filename = datetimenow.strftime('%s/%%d' % logdir)
   date = datetimenow.strftime('%Y-%m-%d %H:%M:%S')
-  print filename, date
+  print 'logdir', logdir, filename, date
   temps =[date]
   for onedev in devs:
     t = read_temp('%s/28-%s/w1_slave' % (base_dir, onedev))
     temps.append('%s:%.2f' % (onedev, t))
-  with open(filename, 'a') as myfile:
-    myfile.write(' '.join(temps))
-    myfile.write('\n')
+  if len(temps) > 1:
+    with open(filename, 'a') as myfile:
+      myfile.write(' '.join(temps))
+      myfile.write('\n')
 
 mymain()
 
