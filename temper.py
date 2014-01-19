@@ -50,11 +50,11 @@ def mymain():
     os.makedirs(logdir)
   filename = datetimenow.strftime('%s/%%d' % logdir)
   date = datetimenow.strftime('%Y-%m-%d %H:%M:%S')
-  print 'logdir', logdir, filename, date
   temps =[date]
   for onedev in devs:
     t = read_temp('%s/28-%s/w1_slave' % (base_dir, onedev))
     temps.append('%s:%.2f' % (onedev, t))
+  print 'logdir', logdir, filename, date, len(temps)
   if len(temps) > 1:
     with open(filename, 'a') as myfile:
       myfile.write(' '.join(temps))
