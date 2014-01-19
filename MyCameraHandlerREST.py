@@ -136,14 +136,21 @@ new Dygraph(document.getElementById("graphdiv2"),
         return 'F'
 
   @staticmethod
-  def ConvertTempStringListFromC(temp, units):
-    """Takes a list of strings of floating point Celsius temps
-    and returns them as a list of floating points strings in the
+  def ConvertTempStringFromC(temp, units):
+    """Takes a string of floating point Celsius temp
+    and returns it as a floating point string in the
     requested units."""
     if MyHandler.CanonicalUnits(units) == 'C':
       return temp
     else:
-      return ["%.2f" % (1.8 * float(t) + 32.0) for t in temp]
+      return "%.2f" % (1.8 * float(temp) + 32.0)
+
+  @staticmethod
+  def ConvertTempStringListFromC(temp, units):
+    """Takes a list of strings of floating point Celsius temps
+    and returns them as a list of floating points strings in the
+    requested units."""
+    return [MyHandler.ConvertTempStringFromC(t,units) for t in temp]
 
   def TemperatureRequestAsJS(self, filename, units):
     """Send the file's data as a javascript array for dygraphs to plot"""
@@ -153,24 +160,36 @@ new Dygraph(document.getElementById("graphdiv2"),
     self.wfile.write('temperatures = [')
     with open(os.path.expanduser(filename)) as myfile:
       content = myfile.readlines()
-    labels = ['"Time"']
-    first = True
+#    labels = []
+    labels = []
+    # First build a list of all the labels.
     for l in content:
-      a= l.strip().split(' ')
-      thetime=a[1]
-      tf = thetime.split(':')
-      timesecs = int(tf[0]) + (int(tf[1]) * 60 + int(tf[2]))/3600.0
-      temps = []
+      a = l.strip().split(' ')
       for fields in a[2:]:
         parts = fields.split(':')
-        temps.append(parts[1])
-        if first:
-          labels.append('"%s"' % parts[0])
+        if not parts[0] in labels:
+          labels.append('%s' % parts[0])
+    labels= sorted(labels)
+ 
+    # Now build the lines with the labels in a consistent order.
+    for l in content:
+      a = l.strip().split(' ')
+      thedate = a[0]
+      thetime = a[1]
+      tf = thetime.split(':')
+      timesecs = int(tf[0]) + (int(tf[1]) * 60 + int(tf[2]))/3600.0
+      temps = ['NaN' for i in labels]
+      for fields in a[2:]:
+        parts = fields.split(':')
+        assert parts[0] in labels
+        temperature = parts[1]
+        if float(temperature) != 85.0:  # 85C seems to be malfunction.
+          temps[labels.index(parts[0])] = self.ConvertTempStringFromC(temperature, units)
+#        temps.append(parts[1])
       self.wfile.write(
         '[new Date(\"%s %s\"), %s],\n' %
-        (a[0], a[1], ','.join(self.ConvertTempStringListFromC(temps, units))))
-      first = False
-    self.wfile.write('];\n templabels = [%s];' % ','.join(labels))
+           (thedate, thetime, ','.join(temps)))
+    self.wfile.write('];\ntemplabels = [%s];\n' % ','.join(['"%s"' % x.lstrip('0') for x in ['Date'] + labels]))
     self.wfile.close()
 
   def DailyTemperatureRequestAsJS(self, filename, units):
