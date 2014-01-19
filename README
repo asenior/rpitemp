@@ -1,0 +1,20 @@
+This is a software package to log temperatures from (DS18B20)[http://www.maximintegrated.com/datasheet/index.mvp/id/2812] sensors and 
+display the temperatures with (dygraphs)[http://dygraphs.com/].
+
+I started out using the project here:
+http://learn.adafruit.com/adafruits-raspberry-pi-lesson-11-ds18b20-temperature-sensing/hardware
+
+I modified the code they point to to log to a text file and used cron to log temperatures every minute.
+Then I used dygraphs to display the temperature via a python web server. 
+
+These commands must be added to the crontab: 
+
+
+# Log the temperature every minute:
+* * * * * python /home/pi/webserver/temper.py >> /home/pi/templog/temper.log 2>&1
+
+# Find the days maximum & minimum on each device:
+58 23 * * * /bin/bash /home/pi/webserver/maxmin.sh >> /home/pi/templog/maxmin.log 2>&1
+
+# Start the web server at boot.
+@reboot cd /home/pi/webserver && echo "SERVER START AT $(date)" >> /home/pi/templog/server.log && python simpleServerWithCameraHandlerREST.py >> /home/pi/templog/server.log 2>&1 &
