@@ -1,5 +1,5 @@
-This is a software package to log temperatures from (DS18B20)[http://www.maximintegrated.com/datasheet/index.mvp/id/2812] sensors and 
-display the temperatures with (dygraphs)[http://dygraphs.com/].
+This is a software package to log temperatures from [DS18B20](http://www.maximintegrated.com/datasheet/index.mvp/id/2812) sensors and 
+display the temperatures with [dygraphs](http://dygraphs.com/).
 
 I started out using the project here:
 http://learn.adafruit.com/adafruits-raspberry-pi-lesson-11-ds18b20-temperature-sensing/hardware
