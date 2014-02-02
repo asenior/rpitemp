@@ -1,3 +1,4 @@
+"""Simple HTTPServer that can serve images or temperature graphs."""
 import os
 import SimpleHTTPServer
 import urlparse
@@ -6,7 +7,26 @@ import datetime
 
 class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
+  def ReadLabels(self, filename):
+    """Read in the id:label correspondence."""
+    self.labelmap = {}
+    with open(filename, 'r') as f:
+      lines = f.readlines()
+    for line in lines:
+      if line:
+        fields = line.split(',')
+        assert len(fields) == 2
+        self.labelmap[fields[0].strip()] = fields[1].strip()
+
+  def LoadLabelMapOnce(self):
+    # Setup the labelmap.
+    try:
+      len(self.labelmap)
+    except AttributeError as e:
+      self.ReadLabels('devicelist.txt')
+
   def do_GET(self):
+    self.LoadLabelMapOnce()
 
     parsedParameters = urlparse.urlparse(self.path)
     queryParsed = urlparse.parse_qs(parsedParameters.query)
@@ -35,17 +55,14 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
       height = queryParsed.get('height',['300'])[0]
       timeout = queryParsed.get('timeout',['500'])[0]
       filename = queryParsed.get('filename',['image.jpg'])[0]
-
       subprocess.call(["raspistill","-n",
          "--width",width,
          "--height",height,
          "--timeout",timeout,
          "-o",filename])
-
       self.processMyRequest(filename)
 
     else:
-
       SimpleHTTPServer.SimpleHTTPRequestHandler.do_GET(self);
 
   def BasicHeaders(self):
@@ -97,13 +114,28 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     self.wfile.write("<script src='/dygraph-combined.js' ></script>\n")
     self.wfile.write("<script src='/dailytemp.js?units=%s' ></script>\n" %
                        units)
-    self.wfile.write("<script src='/temp.js?date=%s&units=%s' ></script>\n" %
+    self.wfile.write(
+      "<script src='/temp.js?date=%s&units=%s' ></script>\n" %
                        (datestring, units))
+    if units[0] == 'C':
+      other_units = "F"
+    else:
+      other_units = 'C'
+    
     self.wfile.write("""
 <body>
   <h2>%s</h2>
+    Temperatures in %s (switch to 
+<a href="temp.html?date=%s&units=%s">%s</a>)<br>
+""" % (dt.strftime("%A %d %B %Y"),
+       units[0], datestring, other_units, other_units))
+
+# Write the dygraph bits.
+    self.wfile.write("""
   <div id="graphdivdaily"></div>
+    <div class="dygraphlegend"  id="dailylabeldiv"></div>
   <div id="graphdiv2"></div>
+    <div class="dygraphlegend"  id="onedaylabeldiv"></div>
 <script>
 new Dygraph(document.getElementById("graphdivdaily"),
     dailytemperatures,
@@ -111,21 +143,25 @@ new Dygraph(document.getElementById("graphdivdaily"),
       customBars: true,
       labels: dailytemplabels,
       ylabel: 'Temperature (%s)',
+    labelsDiv: "dailylabeldiv",
     });
 new Dygraph(document.getElementById("graphdiv2"),
     temperatures,
     {
       labels: templabels,
       ylabel: 'Temperature (%s)',
+    labelsDiv: "onedaylabeldiv",
     });
 </script>
+""" %  (units[0], units[0]))
+    self.wfile.write("""
 <a href="temp.html?date=%s">%s&lt;&lt;</a> &nbsp;&nbsp;&nbsp;&nbsp;
 <a href="temp.html?date=%s">&gt;&gt;%s</a> <br>
+<a href="temp.html">Today</a> <br>
 <a href="photo.html?width=800&height=600">Photo</a>
 </body>
 </html>
-""" % (dt.strftime("%A %d %B %Y"), units[0], units[0], prevday, prevday, nextday, nextday)
-)
+""" % (prevday, prevday, nextday, nextday))
     self.wfile.close()
 
   @staticmethod
@@ -152,15 +188,26 @@ new Dygraph(document.getElementById("graphdiv2"),
     requested units."""
     return [MyHandler.ConvertTempStringFromC(t,units) for t in temp]
 
+  def MapLabels(self, labels):
+    """Change the device_ids to location strings."""
+    mapped_labels = []
+    for rawlabel in labels:
+      rawlabel = rawlabel.lstrip('0')
+      if rawlabel in self.labelmap:
+        mapped_labels.append(self.labelmap[rawlabel])
+      else:
+        mapped_labels.append(rawlabel)
+    return mapped_labels
+
   def TemperatureRequestAsJS(self, filename, units):
     """Send the file's data as a javascript array for dygraphs to plot"""
+    self.LoadLabelMapOnce()
     self.send_response(200)
     self.send_header('Content-Type', 'text/javascript')
     self.end_headers()
     self.wfile.write('temperatures = [')
     with open(os.path.expanduser(filename)) as myfile:
       content = myfile.readlines()
-#    labels = []
     labels = []
     # First build a list of all the labels.
     for l in content:
@@ -189,7 +236,9 @@ new Dygraph(document.getElementById("graphdiv2"),
       self.wfile.write(
         '[new Date(\"%s %s\"), %s],\n' %
            (thedate, thetime, ','.join(temps)))
-    self.wfile.write('];\ntemplabels = [%s];\n' % ','.join(['"%s"' % x.lstrip('0') for x in ['Date'] + labels]))
+    mapped_labels = ['Date'] + self.MapLabels(labels)
+    print 'mapped labels in oneday are labels', mapped_labels
+    self.wfile.write('];\ntemplabels = [%s];\n' % ','.join(['"%s"' % x for x in mapped_labels]))
     self.wfile.close()
 
   def DailyTemperatureRequestAsJS(self, filename, units):
@@ -197,6 +246,7 @@ new Dygraph(document.getElementById("graphdiv2"),
 
     The file is YYYY/MM/DD <device>:mean:min:max <device>...
     """
+    self.LoadLabelMapOnce()
     self.send_response(200)
     self.send_header('Content-Type', 'text/javascript')
     self.end_headers()
@@ -204,6 +254,7 @@ new Dygraph(document.getElementById("graphdiv2"),
     self.wfile.write('dailytemperatures = [\n')
     with open(os.path.expanduser(filename)) as myfile:
       content = myfile.readlines()
+    print 'Labelmap is:', self.labelmap
     labels = []
     # First build a list of all the labels.
     for l in content:
@@ -212,8 +263,9 @@ new Dygraph(document.getElementById("graphdiv2"),
       temps = []
       for fields in a[1:]:
         parts = fields.split(':')
-        if not parts[0] in labels:
-          labels.append(parts[0])
+        rawlabel = parts[0]
+        if not rawlabel in labels:
+          labels.append(rawlabel)
     # TODO sort the labels.
     labels= sorted(labels)
     # Now build a javascript array with all the data.
@@ -229,11 +281,12 @@ new Dygraph(document.getElementById("graphdiv2"),
         temps[labels.index(parts[0])] = "[%s]" % ",".join(
           self.ConvertTempStringListFromC(parts[1:], units))
 
-      # Now pull the temperatures out in the order of the labels.       
-        # TODO Handle different devices / different order.
+      # Now pull the temperatures out in the order of the labels.
       self.wfile.write('[ new Date(\"%s\"), %s],\n' %
                        (thedate, ','.join(temps)))
       first = False
+    mapped_labels = ['Date'] + self.MapLabels(labels)
+    print 'mapped labels in daily are labels', mapped_labels
     self.wfile.write('];\n dailytemplabels = [%s];\n' % ','.join(
-      ['"%s"' % x.lstrip('0') for x in ['Date'] + labels]))
+      ['"%s"' % x for x in mapped_labels]))
     self.wfile.close()

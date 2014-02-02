@@ -1,3 +1,4 @@
+"""Basic web server with optional port."""
 import sys
 import SocketServer
 import MyCameraHandlerREST

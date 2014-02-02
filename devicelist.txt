@@ -1,0 +1,9 @@
+4a4e1ca, Under bath
+4a57acb, Heating bathroom
+4a5a532, Heating bedroom
+4a5ca15, Outside
+4b08c76, Bedroom
+4a4d0aa, Basement
+4a533a9, Well water
+4a58b46, Unknown b46
+4a5e9b3, Heating living room

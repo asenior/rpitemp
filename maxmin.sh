@@ -1,5 +1,6 @@
 #!/bin/bash
 # Find the max and the min for each device in a day's log.
+# Log the output to a summary file.
 if [[ -n "$1" ]]; then
   file="/home/pi/templog/$1";
 else
