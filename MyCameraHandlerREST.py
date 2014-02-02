@@ -117,6 +117,12 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     self.wfile.write(
       "<script src='/temp.js?date=%s&units=%s' ></script>\n" %
                        (datestring, units))
+    self.wfile.write(
+"""
+<style type="text/css">
+.dygraphlegend  > span.highlight { border: 2px solid rgb(128, 128, 128); }
+th { background-color: rgb(255,200,200); }
+</style>""")
     if units[0] == 'C':
       other_units = "F"
     else:
@@ -140,17 +146,31 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 new Dygraph(document.getElementById("graphdivdaily"),
     dailytemperatures,
     {
+  legend: 'always',
       customBars: true,
       labels: dailytemplabels,
       ylabel: 'Temperature (%s)',
+    width: 800,
     labelsDiv: "dailylabeldiv",
+        highlightSeriesOpts: {
+          strokeWidth: 3,
+          strokeBorderWidth: 1,
+          highlightCircleSize: 5,
+        },
     });
 new Dygraph(document.getElementById("graphdiv2"),
     temperatures,
     {
+  legend: 'always',
       labels: templabels,
       ylabel: 'Temperature (%s)',
+    width: 800,
     labelsDiv: "onedaylabeldiv",
+        highlightSeriesOpts: {
+          strokeWidth: 3,
+          strokeBorderWidth: 1,
+          highlightCircleSize: 5,
+        },
     });
 </script>
 """ %  (units[0], units[0]))
@@ -162,6 +182,16 @@ new Dygraph(document.getElementById("graphdiv2"),
 </body>
 </html>
 """ % (prevday, prevday, nextday, nextday))
+
+    self.wfile.write("""<table>""")
+    for l in self.labelmap:
+      self.wfile.write("""
+      <tr><td><input type="checkbox" id="check_file%s"
+      name="{{ f.Basename }}" checked="true"
+      onclick="change_one_file(this)">%s</td></tr>
+      """ % (self.labelmap[l], self.labelmap[l]))
+    self.wfile.write("""</table>""")
+
     self.wfile.close()
 
   @staticmethod
